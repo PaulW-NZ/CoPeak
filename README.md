@@ -49,3 +49,5 @@ The analysis is performed entirely in the browser using JavaScript. The core pro
     - In "peaky" frames, the N strongest frequency peaks are identified.
     - A square matrix (the co-occurrence matrix) is updated by incrementing the count for each pair of peaks found in the same frame.
     - This matrix is then normalized and rendered as a grayscale heatmap, where brighter areas indicate a stronger correlation between two frequencies.
+
+![Screen Shot](Screenshot.png)      
