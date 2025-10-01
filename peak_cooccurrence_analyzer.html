@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Spectral Peak Analyser</title>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            --text-primary: #fff;
+            --text-secondary: #a8d8ff;
+            --ui-bg: rgba(255, 255, 255, 0.1);
+            --ui-border: rgba(255, 255, 255, 0.2);
+            --accent-primary: #4facfe;
+            --selection-bg: rgba(79, 172, 254, 0.25);
+            --selection-border: #4facfe;
+            --marker-colour: #f39c12;
+        }
+
+        .light-theme {
+            --bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            --text-primary: #333;
+            --text-secondary: #555;
+            --ui-bg: rgba(255, 255, 255, 0.8);
+            --ui-border: rgba(0, 0, 0, 0.1);
+            --accent-primary: #007bff;
+            --selection-bg: rgba(0, 123, 255, 0.25);
+            --selection-border: #007bff;
+            --marker-colour: #ffc107;
+        }
+
+        .light-theme select, .light-theme input[type=number] {
+            color: #333;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+            user-select: none;
+        }
+        .container {
+            margin: 0 auto; background: var(--ui-bg); backdrop-filter: blur(10px);
+            border-radius: 20px; border: 1px solid var(--ui-border); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            overflow: hidden; display: flex; flex-direction: column; min-height: calc(100vh - 40px);
+        }
+        .header { background: rgba(0, 0, 0, 0.2); padding: 10px 25px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); display: flex; justify-content: space-between; align-items: center; }
+        .header h1 {
+            font-size: 1.4em; font-weight: 700; background: linear-gradient(45deg, var(--text-primary), var(--text-secondary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: inline-block;
+        }
+        .header-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .main-layout {
+            display: flex;
+            flex-grow: 1;
+            max-width: 1400px; /* Apply max-width here */
+            margin: 0 auto; /* Center the main layout */
+            width: 100%; /* Ensure it takes full width within its parent */
+        }
+        .sidebar {
+            width: 350px; /* Adjust as needed */
+            background: rgba(0, 0, 0, 0.1);
+            border-right: 1px solid var(--ui-border);
+            padding: 15px;
+            overflow-y: auto;
+        }
+        .main-content {
+            flex-grow: 1;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        .toolbar-container {
+            margin-bottom: 15px;
+        }
+        .toolbar {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        details { background: rgba(0, 0, 0, 0.2); border-radius: 10px; padding: 10px; border: 1px solid var(--ui-border); }
+        summary { font-weight: bold; cursor: pointer; padding: 5px 0; }
+        summary:hover { color: var(--accent-primary); }
+        details[open] summary { margin-bottom: 10px; }
+        .toolbar-section { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .toolbar-section label { font-size: 0.85em; font-weight: 500; opacity: 0.9; white-space: nowrap; }
+        .file-input-wrapper input[type=file] { display: none; }
+        .button {
+            color: white; padding: 8px 16px; border: none; border-radius: 12px; cursor: pointer;
+            font-weight: 600; font-size: 0.9em; transition: all 0.3s ease;
+            background: rgba(0, 0, 0, 0.4); /* Darker background for general buttons */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        .button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+        .file-button {
+            background: linear-gradient(45deg, var(--accent-primary), #00f2fe);
+            box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
+        }
+        .file-button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(79, 172, 254, 0.6); }
+        .button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        select, input[type=number] {
+            background: var(--ui-bg); border: 1px solid var(--ui-border); color: white;
+            padding: 6px 10px; border-radius: 8px; font-size: 0.85em;
+        }
+        select:focus, input[type=number]:focus {
+            outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.3);
+        }
+        option { background: #2a5298; color: white; }
+        .outputs { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 2em; align-items: flex-start; }
+        
+        .chart-wrapper {
+            display: grid;
+            grid-template-columns: auto 1fr auto; /* Y-axis, Chart, Corner */
+            grid-template-rows: auto 1fr auto; /* Top margin, Chart, X-axis */
+            gap: 5px;
+            min-width: 512px; /* Ensure charts have a minimum width */
+        }
+        
+.chart-wrapper h2 {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    text-align: center;
+    margin-bottom: 10px;
+}
+.chart-area {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    display: flex;
+    flex-direction: column;
+    position: relative; /* For positioning canvas overlays */
+}
+        
+        .y-axis {
+            grid-column: 1 / 2;
+            grid-row: 2 / 3;
+            display: flex;
+            flex-direction: column-reverse; /* Frequencies go bottom-up */
+            justify-content: space-between;
+            padding-right: 5px;
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            text-align: right;
+            position: relative; /* For absolute positioning of labels */
+            min-width: 40px; /* Ensure enough space for labels */
+        }        .x-axis {
+            grid-column: 2 / 3;
+            grid-row: 3 / 4;
+            display: flex;
+            justify-content: space-between;
+            padding-top: 5px;
+            font-size: 0.75em;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+        
+        .corner {
+            grid-column: 3 / 4;
+            grid-row: 3 / 4;
+        }
+        
+.y-axis span, .x-axis span {
+    white-space: nowrap;
+}
+
+.spectrogram-chart-wrapper {
+    flex-basis: 100%;
+}
+
+.canvas-container { min-width: 512px; }
+        progress {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    border-radius: 5px;
+    border: none;
+    overflow: hidden;
+}
+progress::-webkit-progress-bar {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+progress::-webkit-progress-value {
+    background-color: var(--accent-primary);
+    transition: width 0.1s linear;
+}
+progress::-moz-progress-bar {
+    background-color: var(--accent-primary);
+}
+
+#spectrogramOverlayCanvas, #heatmapOverlayCanvas, #spectrogramLinesCanvas {
+    border: none;
+    margin: 0;
+}
+        #status { text-align: center; margin-top: 1em; font-style: italic; color: #555; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>Spectral Peak Analyser</h1>
+        <div class="header-controls">
+            <button id="theme-switcher" class="button">Toggle Theme</button>
+        </div>
+    </div>
+    <div class="main-layout">
+        <div class="sidebar">
+            <div class="toolbar-container">
+                <div class="toolbar">
+                    <details open>
+                        <summary>File &amp; Analysis</summary>
+                        <div class="toolbar-section" title="Select an audio file for analysis. Common formats like WAV, MP3, etc., are supported, as well as headerless raw files.">
+                            <label for="audioFile">Audio File:</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="audioFile" accept="audio/*,.raw">
+                                <button class="button file-button" onclick="document.getElementById('audioFile').click()">Choose File</button>
+                            </div>
+                        </div>
+                        <div class="toolbar-section" title="Specify the type of file being loaded. 'Auto-Detect' works for most standard formats.">
+                            <label for="fileType">File Type:</label>
+                            <select id="fileType">
+                                <option value="auto" selected>Auto-Detect</option>
+                                <option value="raw">Raw (Headerless)</option>
+                            </select>
+                        </div>
+                        <div id="rawSettings" style="display: none; width: 100%;">
+                            <details open style="background: rgba(0,0,0,0.3); border-color: var(--accent-primary);">
+                                <summary>Raw File Settings</summary>
+                                <div class="toolbar-section" title="The sample rate of the raw audio file in Hz.">
+                                    <label for="rawSampleRate">Sample Rate:</label>
+                                    <input type="number" id="rawSampleRate" value="8000">
+                                </div>
+                                <div class="toolbar-section" title="The format of each sample in the raw file.">
+                                    <label for="rawSampleFormat">Sample Format:</label>
+                                    <select id="rawSampleFormat">
+                                        <option value="s16le" selected>16-bit Signed Int (LE)</option>
+                                        <option value="s16be">16-bit Signed Int (BE)</option>
+                                        <option value="u8">8-bit Unsigned Int</option>
+                                        <option value="f32le">32-bit Float (LE)</option>
+                                        <option value="f32be">32-bit Float (BE)</option>
+                                    </select>
+                                </div>
+                            </details>
+                        </div>
+                        <div class="toolbar-section" title="Applies a high-pass filter to boost higher frequencies. This can help in formant analysis, and +6dB/octave is a common starting point.">
+                            <label for="preEmphasis">Pre-FFT Gain (/octave):</label>
+                            <select id="preEmphasis">
+                                <option value="none" selected>None</option>
+                                <option value="3dB">+3dB</option>
+                                <option value="6dB">+6dB</option>
+                            </select>
+                        </div>
+<div class="toolbar-section" title="The size of the analysis window in samples. This affects the trade-off between time and frequency resolution.">
+                            <label for="windowSize">Window Size:</label>
+                            <input type="number" id="windowSize" value="256">
+                        </div>
+                        <div class="toolbar-section" title="The size of the Fast Fourier Transform. A larger size provides better frequency resolution but poorer time resolution.">
+                            <label for="fftSize">FFT Size:</label>
+                            <input type="number" id="fftSize" value="512">
+                        </div>
+                        <div class="toolbar-section" title="The number of samples to step forward for each analysis frame (also known as hop size). Smaller values create a smoother, more detailed spectrogram.">
+                            <label for="stepSize">Step Size (Hop):</label>
+                            <input type="number" id="stepSize" value="32">
+                        </div>
+                        <div class="toolbar-section" title="The minimum and maximum decibel range for coloring the spectrogram, which controls the display contrast.">
+                            <label for="minDb">Min dB:</label>
+                            <input type="number" id="minDb" value="-100">
+                        </div>
+                        <div class="toolbar-section" title="The maximum decibel value for coloring the spectrogram, affecting contrast.">
+                            <label for="maxDb">Max dB:</label>
+                            <input type="number" id="maxDb" value="0">
+                        </div>
+                        <div class="toolbar-section" title="The maximum number of spectral peaks to identify in each frame for co-occurrence analysis.">
+                            <label for="numPeaks">Number of Peaks:</label>
+                            <input type="number" id="numPeaks" value="15">
+                        </div>
+                        <div class="toolbar-section" title="A measure of how 'peaky' a spectrum must be to be included in the co-occurrence analysis. Higher values consider only frames with sharp, distinct peaks.">
+                            <label for="peakyThreshold">Peaky Threshold:</label>
+                            <input type="number" id="peakyThreshold" value="1.5" step="0.1">
+                        </div>
+                        <button id="processBtn" class="button file-button" title="Process the entire audio file with the current settings.">Process File</button>
+                        <button id="processSelectionBtn" class="button file-button" disabled title="Process only the time range selected on the spectrogram.">Process Selection</button>
+                        <button id="unzoomBtn" class="button file-button" disabled title="Reset the view to the full audio file after zooming into a selection.">Unzoom</button>
+                    </details>
+                </div>
+            </div>
+            <div id="status">Select a file and click "Process Audio"</div>
+            <progress id="progressBar" value="0" max="100" style="width: 100%; display: none; margin-top: 10px;"></progress>
+        </div>
+
+        <div class="main-content">
+            <div id="loadingSpinner" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                <div class="spinner"></div>
+            </div>
+            <div class="outputs">
+                <div class="chart-wrapper">
+                    <div class="y-axis" id="heatmapYAxis"></div>
+                    <div class="chart-area">
+                        <div class="canvas-container">
+                            <canvas id="heatmapCanvas"></canvas>
+                            <canvas id="heatmapOverlayCanvas" width="0" height="0" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                        </div>
+                        <div class="x-axis" id="heatmapXAxis"></div>
+                    </div>
+                    <div class="corner"></div>
+                    <h2>Peak Co-occurrence</h2>
+                </div>
+                <div class="chart-wrapper spectrogram-chart-wrapper">
+                    <div class="y-axis" id="spectrogramYAxis"></div>
+                    <div class="chart-area">
+                        <div class="canvas-container" style="width: 100%; position: relative;">
+                            <canvas id="spectrogramCanvas"></canvas>
+                            <canvas id="spectrogramOverlayCanvas" width="0" height="0" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                            <canvas id="spectrogramLinesCanvas" width="0" height="0" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                        </div>
+                        <div class="x-axis" id="spectrogramXAxis"></div>
+                    </div>
+                    <div class="corner"></div>
+                    <h2>Spectrogram</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// --- DOM Elements ---
+const processBtn = document.getElementById('processBtn');
+const processSelectionBtn = document.getElementById('processSelectionBtn');
+const unzoomBtn = document.getElementById('unzoomBtn');
+const fileInput = document.getElementById('audioFile');
+const windowSizeInput = document.getElementById('windowSize');
+const fftSizeInput = document.getElementById('fftSize');
+const stepSizeInput = document.getElementById('stepSize');
+const numPeaksInput = document.getElementById('numPeaks');
+const peakyThresholdInput = document.getElementById('peakyThreshold');
+const preEmphasisSelect = document.getElementById('preEmphasis');
+const statusDiv = document.getElementById('status');
+const heatmapCanvas = document.getElementById('heatmapCanvas');
+const spectrogramCanvas = document.getElementById('spectrogramCanvas'); // NEW
+const heatmapCtx = heatmapCanvas.getContext('2d');
+const spectrogramCtx = spectrogramCanvas.getContext('2d');
+let isSelecting = false;
+
+// --- Event Listener ---
+processBtn.addEventListener('click', () => handleAudioProcessing());
+document.getElementById('processSelectionBtn').addEventListener('click', () => {
+    if (selectionStart === null || selectionEnd === null) {
+        alert('Please select a time range on the spectrogram first.');
+        return;
+    }
+    const selection = { 
+        startX: Math.min(selectionStart, selectionEnd), 
+        endX: Math.max(selectionStart, selectionEnd) 
+    };
+    handleAudioProcessing(selection);
+});
+
+document.getElementById('unzoomBtn').addEventListener('click', () => {
+    selectionStart = null;
+    selectionEnd = null;
+    handleAudioProcessing();
+});
+
+
+
+
+/**
+ * Decodes a headerless raw audio file based on user-provided parameters.
+ * @param {File} file The raw audio file.
+ * @param {number} sampleRate The sample rate in Hz.
+ * @param {string} format The sample format (e.g., 's16le').
+ * @returns {Promise<{audioBuffer: object, wavInfo: object}>}
+ */
+function decodeRawAudioFile(file, sampleRate, format) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const arrayBuffer = e.target.result;
+                const dataView = new DataView(arrayBuffer);
+                let numSamples, bytesPerSample;
+                let readSample;
+
+                switch (format) {
+                    case 's16le': // 16-bit Signed Int, Little Endian
+                        bytesPerSample = 2;
+                        numSamples = arrayBuffer.byteLength / bytesPerSample;
+                        readSample = (i) => dataView.getInt16(i * bytesPerSample, true) / 32768.0;
+                        break;
+                    case 's16be': // 16-bit Signed Int, Big Endian
+                        bytesPerSample = 2;
+                        numSamples = arrayBuffer.byteLength / bytesPerSample;
+                        readSample = (i) => dataView.getInt16(i * bytesPerSample, false) / 32768.0;
+                        break;
+                    case 'u8': // 8-bit Unsigned Int
+                        bytesPerSample = 1;
+                        numSamples = arrayBuffer.byteLength;
+                        readSample = (i) => (dataView.getUint8(i) / 128.0) - 1.0; // Convert to [-1.0, 1.0]
+                        break;
+                    case 'f32le': // 32-bit Float, Little Endian
+                        bytesPerSample = 4;
+                        numSamples = arrayBuffer.byteLength / bytesPerSample;
+                        readSample = (i) => dataView.getFloat32(i * bytesPerSample, true);
+                        break;
+                    case 'f32be': // 32-bit Float, Big Endian
+                        bytesPerSample = 4;
+                        numSamples = arrayBuffer.byteLength / bytesPerSample;
+                        readSample = (i) => dataView.getFloat32(i * bytesPerSample, false);
+                        break;
+                    default:
+                        throw new Error(`Unsupported raw format: ${format}`);
+                }
+
+                const samples = new Float32Array(numSamples);
+                for (let i = 0; i < numSamples; i++) {
+                    samples[i] = readSample(i);
+                }
+
+                // Mock an AudioBuffer-like object that the rest of the app can use
+                const audioBuffer = {
+                    sampleRate: sampleRate,
+                    numberOfChannels: 1,
+                    length: numSamples,
+                    duration: numSamples / sampleRate,
+                    getChannelData: (channel) => {
+                        if (channel === 0) return samples;
+                        return null; // Assuming mono for now
+                    }
+                };
+                
+                // Mock a wavInfo object
+                const wavInfo = {
+                    sampleRate: sampleRate,
+                    numChannels: 1,
+                    numSamples: numSamples,
+                    bitsPerSample: bytesPerSample * 8
+                };
+
+                resolve({ audioBuffer, wavInfo });
+
+            } catch (err) {
+                reject(err);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+/**
+ * Main function to orchestrate the audio processing pipeline.
+ */
+async function handleAudioProcessing(timeRange) {
+    if (!fileInput.files.length) {
+        alert('Please select an audio file first.');
+        return;
+    }
+
+    // --- Manage button states ---
+    if (timeRange) { // A selection is being processed
+        unzoomBtn.disabled = false;
+        processSelectionBtn.disabled = true;
+    } else { // A full file is being processed (or unzoomed)
+        unzoomBtn.disabled = true;
+        processSelectionBtn.disabled = true;
+    }
+
+    statusDiv.textContent = 'Processing... Please wait.';
+    document.getElementById('loadingSpinner').style.display = 'block';
+    const progressBar = document.getElementById('progressBar');
+    progressBar.style.display = 'block';
+    progressBar.value = 0;
+
+    try {
+        const fileType = document.getElementById('fileType').value;
+        const file = fileInput.files[0];
+        const windowSize = parseInt(windowSizeInput.value);
+        const fftSize = parseInt(fftSizeInput.value);
+        const stepSize = parseInt(stepSizeInput.value);
+        const numPeaks = parseInt(numPeaksInput.value);
+        const peakyThreshold = parseFloat(peakyThresholdInput.value);
+        const preEmphasisType = preEmphasisSelect.value;
+
+        let audioBuffer, wavInfo;
+
+        if (fileType === 'raw') {
+            const rawSampleRate = parseInt(document.getElementById('rawSampleRate').value);
+            const rawSampleFormat = document.getElementById('rawSampleFormat').value;
+            if (!rawSampleRate || rawSampleRate <= 0) {
+                throw new Error("Please provide a valid sample rate for the raw file.");
+            }
+            ({ audioBuffer, wavInfo } = await decodeRawAudioFile(file, rawSampleRate, rawSampleFormat));
+        } else { // 'auto'
+            ({ audioBuffer, wavInfo } = await decodeAudioFile(file));
+        }
+
+        const audioData = audioBuffer.getChannelData(0);
+
+        // Update header with file info
+        const headerTitle = document.querySelector('.header h1');
+        let headerText = 'Spectral Peak Analyser';
+        if (file) {
+            headerText += ` - ${file.name}`;
+        }
+        if (audioBuffer) {
+            headerText += ` (${audioBuffer.sampleRate} Hz`;
+            if (wavInfo && wavInfo.bitsPerSample) {
+                headerText += `, ${wavInfo.bitsPerSample}-bit)`;
+            } else {
+                headerText += `)`;
+            }
+        }
+        headerTitle.textContent = headerText;
+
+        const numFreqBins = fftSize / 2;
+        const coMatrix = Array(numFreqBins).fill(0).map(() => Array(numFreqBins).fill(0));
+        
+        let spectrogramData = []; // Array to store spectra for the spectrogram
+        const hammingWindow = createHammingWindow(windowSize);
+        
+        let lastSample = 0;
+
+        const totalTimeSlices = Math.floor((audioData.length - windowSize) / stepSize) + 1;
+        let startSlice = 0;
+        let endSlice = totalTimeSlices;
+
+        if (timeRange) {
+            startSlice = Math.floor((timeRange.startX / spectrogramCanvas.width) * totalTimeSlices);
+            endSlice = Math.floor((timeRange.endX / spectrogramCanvas.width) * totalTimeSlices);
+        }
+
+        // Main processing loop
+        for (let i = 0; i < totalTimeSlices; i++) {
+            const sliceIndex = i * stepSize;
+            let chunk = audioData.slice(sliceIndex, sliceIndex + windowSize);
+
+            if (preEmphasisType !== 'none') {
+                const filterCoeff = preEmphasisType === '6dB' ? 0.97 : 0.60;
+                chunk = applyPreEmphasis(chunk, filterCoeff, lastSample);
+            }
+            lastSample = chunk[chunk.length - 1];
+
+            const windowedChunk = chunk.map((sample, index) => sample * hammingWindow[index]);
+            
+            const spectrum = fft(windowedChunk, fftSize);
+            const powerSpectrum = spectrum.slice(0, numFreqBins).map(c => {
+                const power = c.real * c.real + c.imag * c.imag;
+                return 10 * Math.log10(Math.max(1e-9, power));
+            });
+
+            spectrogramData.push(powerSpectrum); // Collect the spectrum for the spectrogram
+
+            if (i >= startSlice && i < endSlice) {
+                const crestFactor = calculateCrestFactor(powerSpectrum);
+                if (crestFactor >= peakyThreshold) {
+                    const peakIndices = findPeaks(powerSpectrum, numPeaks);
+                    for (let j = 0; j < peakIndices.length; j++) {
+                        for (let k = j + 1; k < peakIndices.length; k++) {
+                            const p1 = peakIndices[j]; const p2 = peakIndices[k];
+                            coMatrix[p1][p2]++; coMatrix[p2][p1]++;
+                        }
+                    }
+                }
+            }
+
+            // Update progress and yield to event loop
+            if (i % 20 === 0 || i === totalTimeSlices - 1) {
+                progressBar.value = (i / (totalTimeSlices - 1)) * 100;
+                await new Promise(resolve => setTimeout(resolve, 0)); // Yield to event loop
+            }
+        }
+        
+        if (timeRange) {
+            const zoomedSpectrogramData = spectrogramData.slice(startSlice, endSlice);
+            drawSpectrogram(zoomedSpectrogramData);
+        } else {
+            drawSpectrogram(spectrogramData);
+        }
+        drawHeatmap(normalizeMatrix(coMatrix)); // Draw the co-occurrence heatmap
+
+        statusDiv.textContent = 'Processing complete.';
+
+        // Update axis labels
+        const totalDuration = audioData.length / audioBuffer.sampleRate;
+        if (timeRange) {
+            const selectionStartTime = startSlice * stepSize / audioBuffer.sampleRate;
+            const selectionDuration = (endSlice - startSlice) * stepSize / audioBuffer.sampleRate;
+            updateSpectrogramAxes(audioBuffer.sampleRate, fftSize, selectionDuration, selectionStartTime);
+        } else {
+            updateSpectrogramAxes(audioBuffer.sampleRate, fftSize, totalDuration, 0);
+        }
+        updateHeatmapAxes(audioBuffer.sampleRate, fftSize);
+
+    } catch (error) {
+        statusDiv.textContent = `Error: ${error.message}`;
+        console.error('Processing failed:', error);
+    } finally {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        progressBar.style.display = 'none';
+    }
+}
+
+/**
+ * Updates the time and frequency axis labels for the spectrogram.
+ */
+function updateSpectrogramAxes(sampleRate, fftSize, displayDuration, startTime) {
+    const spectrogramYAxis = document.getElementById('spectrogramYAxis');
+    const spectrogramXAxis = document.getElementById('spectrogramXAxis');
+    spectrogramYAxis.innerHTML = '';
+    spectrogramXAxis.innerHTML = '';
+
+    const nyquist = sampleRate / 2;
+    const numFreqBins = fftSize / 2;
+
+    // Y-axis (Frequency)
+    const chartAreaHeight = spectrogramCanvas.height;
+    const minLabelHeight = 15; // Minimum height needed for a label
+    let freqStep = 1000; // Start with 1 kHz
+
+    if (chartAreaHeight > 0) {
+        const maxLabels = Math.floor(chartAreaHeight / minLabelHeight);
+        if (maxLabels > 0) {
+            const desiredStep = Math.ceil(nyquist / maxLabels / 1000) * 1000; // Round up to nearest 1kHz
+            if (desiredStep > freqStep) {
+                freqStep = desiredStep;
+            }
+        }
+    }
+
+    for (let freq = 0; freq <= nyquist; freq += freqStep) { // Every 1 kHz
+        const label = document.createElement('span');
+        const freqInKHz = freq / 1000;
+        if (Number.isInteger(freqInKHz)) {
+            label.textContent = `${freqInKHz}kHz`;
+        } else {
+            label.textContent = `${freqInKHz.toFixed(1)}kHz`;
+        }
+        label.style.position = 'absolute';
+        label.style.top = `${(1 - (freq / nyquist)) * 100}%`;
+        label.style.marginTop = '-0.375em'; // Half of 0.75em font-size
+        spectrogramYAxis.appendChild(label);
+    }
+
+    // X-axis (Time)
+    const numLabels = Math.max(2, Math.floor(spectrogramCanvas.width / 80)); // Aim for a label every 80px, but at least 2
+    if (displayDuration > 0) {
+        const timeStep = displayDuration / (numLabels > 1 ? numLabels - 1 : 1);
+
+        for (let i = 0; i < numLabels; i++) {
+            const time = startTime + (i * timeStep);
+            const label = document.createElement('span');
+            const precision = displayDuration < 1 ? 3 : (displayDuration < 10 ? 2 : 1);
+            label.textContent = `${time.toFixed(precision)}s`;
+            spectrogramXAxis.appendChild(label);
+        }
+    } else { // Handle zero duration case
+        const label = document.createElement('span');
+        label.textContent = `${startTime.toFixed(2)}s`;
+        spectrogramXAxis.appendChild(label);
+    }
+}
+
+/**
+ * Updates the frequency axis labels for the heatmap.
+ */
+function updateHeatmapAxes(sampleRate, fftSize) {
+    const heatmapYAxis = document.getElementById('heatmapYAxis');
+    const heatmapXAxis = document.getElementById('heatmapXAxis');
+    heatmapYAxis.innerHTML = '';
+    heatmapXAxis.innerHTML = '';
+
+    const nyquist = sampleRate / 2;
+    const numFreqBins = fftSize / 2;
+
+    // Y-axis (Frequency)
+    const chartAreaHeight = heatmapCanvas.height;
+    const minLabelHeight = 15; // Minimum height needed for a label
+    let freqStep = 1000; // Start with 1 kHz
+
+    if (chartAreaHeight > 0) {
+        const maxLabels = Math.floor(chartAreaHeight / minLabelHeight);
+        if (maxLabels > 0) {
+            const desiredStep = Math.ceil(nyquist / maxLabels / 1000) * 1000; // Round up to nearest 1kHz
+            if (desiredStep > freqStep) {
+                freqStep = desiredStep;
+            }
+        }
+    }
+
+    for (let freq = 0; freq <= nyquist; freq += freqStep) { // Every 1 kHz
+        const label = document.createElement('span');
+        const freqInKHz = freq / 1000;
+        if (Number.isInteger(freqInKHz)) {
+            label.textContent = `${freqInKHz}kHz`;
+        } else {
+            label.textContent = `${freqInKHz.toFixed(1)}kHz`;
+        }
+        label.style.position = 'absolute';
+        label.style.top = `${(1 - (freq / nyquist)) * 100}%`;
+        label.style.marginTop = '-0.375em'; // Half of 0.75em font-size
+        heatmapYAxis.appendChild(label);
+    }
+
+    // X-axis (Frequency)
+    for (let freq = 0; freq <= nyquist; freq += 1000) { // Every 1 kHz
+        const label = document.createElement('span');
+        const freqInKHz = freq / 1000;
+        if (Number.isInteger(freqInKHz)) {
+            label.textContent = `${freqInKHz}kHz`;
+        } else {
+            label.textContent = `${freqInKHz.toFixed(1)}kHz`;
+        }
+        heatmapXAxis.appendChild(label);
+    }
+}
+
+/**
+ * Draws the collected spectra as a spectrogram.
+ * @param {Array<Array<number>>} data - 2D array of power spectra.
+ */
+function drawSpectrogram(data) {
+    if (!data.length) return;
+
+    const minDb = parseFloat(document.getElementById('minDb').value);
+    const maxDb = parseFloat(document.getElementById('maxDb').value);
+    const range = maxDb - minDb;
+
+    const timeSlices = data.length;
+    const freqBins = data[0].length;
+    
+    // Set canvas dimensions
+    spectrogramCanvas.height = freqBins;
+    spectrogramCanvas.width = spectrogramCanvas.parentElement.clientWidth;
+    spectrogramCanvas.style.height = `${freqBins}px`;
+    spectrogramCanvas.style.width = '100%';
+
+    // Get a fresh context AFTER resizing the canvas, as resizing resets the context.
+    const spectrogramCtx = spectrogramCanvas.getContext('2d');
+    spectrogramCtx.clearRect(0, 0, spectrogramCanvas.width, spectrogramCanvas.height);
+
+    // Clear the overlay canvas as well to remove any previous selections
+    if (spectrogramOverlayCtx) {
+        spectrogramOverlayCtx.clearRect(0, 0, spectrogramOverlayCanvas.width, spectrogramOverlayCanvas.height);
+    }
+
+    const cellWidth = spectrogramCanvas.width / timeSlices;
+    const cellHeight = 1; // Each frequency bin is 1 pixel high
+
+    for (let t = 0; t < timeSlices; t++) {
+        for (let f = 0; f < freqBins; f++) {
+            const value = data[t][f];
+            const normalizedValue = (value - minDb) / range;
+            spectrogramCtx.fillStyle = valueToColor(normalizedValue);
+            // Y-axis is inverted in canvas, so we draw from the bottom up
+            spectrogramCtx.fillRect(t * cellWidth, spectrogramCanvas.height - (f + 1) * cellHeight, cellWidth, cellHeight);
+        }
+    }
+}
+
+
+// --- Helper Functions (most are unchanged) ---
+function drawHeatmap(matrix) {
+    const size = matrix.length;
+    heatmapCanvas.width = 512;
+    heatmapCanvas.height = 512;
+    const cellSize = heatmapCanvas.width / size;
+    heatmapCtx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const value = matrix[y][x];
+            heatmapCtx.fillStyle = valueToColor(value);
+            heatmapCtx.fillRect(x * cellSize, heatmapCanvas.height - (y + 1) * cellSize, cellSize, cellSize);
+        }
+    }
+}
+
+function applyPreEmphasis(chunk, coefficient, initialPrevSample) {
+    const filteredChunk = new Float32Array(chunk.length);
+    let prevSample = initialPrevSample;
+    for (let i = 0; i < chunk.length; i++) {
+        filteredChunk[i] = chunk[i] - coefficient * prevSample;
+        prevSample = chunk[i];
+    }
+    return filteredChunk;
+}
+
+function parseWavInfo(arrayBuffer) {
+    const view = new DataView(arrayBuffer);
+    // A basic check for RIFF and WAVE headers
+    if (view.getUint32(0, false) !== 0x52494646 || view.getUint32(8, false) !== 0x57415645) {
+        return null;
+    }
+    try {
+        const numChannels = view.getUint16(22, true);
+        const sampleRate = view.getUint32(24, true);
+        const dataChunkSize = view.getUint32(40, true);
+        const bitsPerSample = view.getUint16(34, true);
+        const numSamples = dataChunkSize / (numChannels * (bitsPerSample / 8));
+        return { sampleRate, numChannels, numSamples, bitsPerSample };
+    } catch (e) {
+        console.error("Could not parse WAV header, using default AudioContext.", e);
+        return null;
+    }
+}
+
+function decodeAudioFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const arrayBuffer = e.target.result;
+                const wavInfo = parseWavInfo(arrayBuffer);
+
+                let audioBuffer;
+                // If we have valid WAV info, use OfflineAudioContext to prevent resampling
+                if (wavInfo && wavInfo.sampleRate) {
+                    const offlineContext = new OfflineAudioContext(wavInfo.numChannels, wavInfo.numSamples, wavInfo.sampleRate);
+                    audioBuffer = await offlineContext.decodeAudioData(arrayBuffer);
+                } else {
+                    // Fallback for non-WAV files or parsing errors
+                    console.warn("Could not parse WAV info, falling back to default AudioContext which may resample.");
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                }
+                resolve({ audioBuffer, wavInfo });
+            } catch (err) {
+                reject(err);
+            }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function createHammingWindow(size) {
+    const window = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+        window[i] = 0.54 - 0.46 * Math.cos((2 * Math.PI * i) / (size - 1));
+    }
+    return window;
+}
+
+function findPeaks(spectrum, numPeaks) {
+    const peaks = [];
+    for (let i = 1; i < spectrum.length - 1; i++) {
+        if (spectrum[i] > spectrum[i - 1] && spectrum[i] > spectrum[i + 1]) {
+            peaks.push({ index: i, value: spectrum[i] });
+        }
+    }
+    return peaks.sort((a, b) => b.value - a.value).slice(0, numPeaks).map(p => p.index);
+}
+
+function normalizeMatrix(matrix) {
+    let maxVal = 0;
+    for (let row of matrix) { for (let val of row) { if (val > maxVal) maxVal = val; } }
+    if (maxVal === 0) return matrix;
+    return matrix.map(row => row.map(val => val / maxVal));
+}
+
+function valueToColor(value) {
+    // Clamp value to be between 0 and 1
+    const v = Math.max(0, Math.min(1, value));
+    // Inverted grayscale
+    const shade = Math.floor((1 - v) * 255);
+    return `rgb(${shade}, ${shade}, ${shade})`;
+}
+
+/**
+ * Calculates the crest factor of a spectrum.
+ * @param {Array<number>} spectrum - The input spectrum.
+ * @returns {number} The crest factor.
+ */
+function calculateCrestFactor(spectrum) {
+    if (spectrum.length === 0) return 0;
+
+    let peakValue = -Infinity;
+    let sumOfSquares = 0;
+
+    for (const value of spectrum) {
+        if (value > peakValue) {
+            peakValue = value;
+        }
+        sumOfSquares += value * value;
+    }
+
+    const meanSquare = sumOfSquares / spectrum.length;
+    const rmsValue = Math.sqrt(meanSquare);
+
+    if (rmsValue === 0) return 0;
+
+    return peakValue / rmsValue;
+}
+
+// FIX 2: Replace the buggy FFT with the correct implementation from SignalView.html
+
+/**
+ * Correct, performant FFT implementation.
+ * Takes a real-valued Float32Array and returns an interleaved complex Float32Array.
+ * @param {Float32Array} buffer
+ * @returns {Float32Array}
+ */
+function _fft_impl(buffer) {
+    const n = buffer.length;
+    if ((n & (n - 1)) !== 0) {
+        const p2 = Math.pow(2, Math.ceil(Math.log2(n)));
+        const pad = new Float32Array(p2);
+        pad.set(buffer);
+        return _fft_impl(pad);
+    }
+    const out = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) {
+        out[i * 2] = buffer[i];
+    }
+    for (let i = 0, j = 0; i < n; i++) {
+        if (j > i) {
+            [out[i * 2], out[j * 2]] = [out[j * 2], out[i * 2]];
+            [out[i * 2 + 1], out[j * 2 + 1]] = [out[j * 2 + 1], out[i * 2 + 1]];
+        }
+        let m = n >> 1;
+        while (m >= 2 && j >= m) {
+            j -= m;
+            m >>= 1;
+        }
+        j += m;
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+        const half = len >> 1,
+            w_r = Math.cos(Math.PI / half),
+            w_i = -Math.sin(Math.PI / half);
+        for (let i = 0; i < n; i += len) {
+            let u_r = 1,
+                u_i = 0;
+            for (let j = 0; j < half; j++) {
+                const l = i + j,
+                    r = i + j + half;
+                const t_r = out[r * 2] * u_r - out[r * 2 + 1] * u_i;
+                const t_i = out[r * 2] * u_i + out[r * 2 + 1] * u_r;
+                out[r * 2] = out[l * 2] - t_r;
+                out[r * 2 + 1] = out[l * 2 + 1] - t_i;
+                out[l * 2] += t_r;
+                out[l * 2 + 1] += t_i;
+                const next_u_r = u_r * w_r - u_i * w_i;
+                u_i = u_r * w_i + u_i * w_r;
+                u_r = next_u_r;
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * Wrapper for the FFT function to match the data structure used in this file (array of objects).
+ * @param {Float32Array} inputArray
+ * @param {number} fftSize
+ * @returns {Array<{real: number, imag: number}>}
+ */
+function fft(inputArray, fftSize) {
+    // 1. Prepare input buffer with zero-padding if necessary
+    const buffer = new Float32Array(fftSize);
+    buffer.set(inputArray);
+
+    // 2. Call the correct FFT implementation
+    const flat_out = _fft_impl(buffer);
+
+    // 3. Convert the interleaved output back to an array of objects
+    const ordered = new Array(fftSize);
+    for (let i = 0; i < fftSize; i++) {
+        ordered[i] = { real: flat_out[i * 2], imag: flat_out[i * 2 + 1] };
+    }
+    return ordered;
+}
+
+let selectionStart = null;
+let selectionEnd = null;
+let spectrogramOverlayCanvas;
+let spectrogramOverlayCtx;
+
+spectrogramCanvas.addEventListener('mousedown', (e) => {
+    isSelecting = true;
+    const rect = spectrogramCanvas.getBoundingClientRect();
+    selectionStart = e.clientX - rect.left;
+    selectionEnd = selectionStart;
+});
+
+spectrogramCanvas.addEventListener('mousemove', (e) => {
+    if (isSelecting) {
+        const rect = spectrogramCanvas.getBoundingClientRect();
+        selectionEnd = e.clientX - rect.left;
+        drawSelection();
+    }
+});
+
+spectrogramCanvas.addEventListener('mouseup', () => {
+    isSelecting = false;
+    // Enable process selection button if a valid selection has been made
+    if (selectionStart !== null && selectionEnd !== null && Math.abs(selectionStart - selectionEnd) > 1) {
+        processSelectionBtn.disabled = false;
+    }
+});
+
+function drawSelection() {
+    // Match overlay canvas position and size with the main spectrogram canvas
+    spectrogramOverlayCanvas.width = spectrogramCanvas.width;
+    spectrogramOverlayCanvas.height = spectrogramCanvas.height;
+    spectrogramOverlayCanvas.style.left = spectrogramCanvas.offsetLeft + 'px';
+    spectrogramOverlayCanvas.style.top = spectrogramCanvas.offsetTop + 'px';
+
+    spectrogramOverlayCtx.clearRect(0, 0, spectrogramOverlayCanvas.width, spectrogramOverlayCanvas.height);
+    spectrogramOverlayCtx.fillStyle = 'rgba(0, 123, 255, 0.25)';
+    const x = Math.min(selectionStart, selectionEnd);
+    const width = Math.abs(selectionStart - selectionEnd);
+    spectrogramOverlayCtx.fillRect(x, 0, width, spectrogramOverlayCanvas.height);
+}
+
+function loadTheme() {
+    const theme = localStorage.getItem('theme');
+    if (theme) {
+        document.body.classList.add(theme);
+    }
+}
+
+function toggleTheme() {
+    document.body.classList.toggle('light-theme');
+    let theme = 'dark-theme';
+    if (document.body.classList.contains('light-theme')) {
+        theme = 'light-theme';
+    }
+    localStorage.setItem('theme', theme);
+}
+
+// --- Interactive Cross-referencing Feature ---
+let heatmapOverlayCanvas;
+let heatmapOverlayCtx;
+let spectrogramLinesCanvas;
+let spectrogramLinesCtx;
+
+/**
+ * Draws a crosshair on the heatmap overlay canvas.
+ */
+function drawHeatmapCrosshair(x, y) {
+    heatmapOverlayCanvas.width = heatmapCanvas.width;
+    heatmapOverlayCanvas.height = heatmapCanvas.height;
+    heatmapOverlayCanvas.style.left = heatmapCanvas.offsetLeft + 'px';
+    heatmapOverlayCanvas.style.top = heatmapCanvas.offsetTop + 'px';
+    heatmapOverlayCtx.clearRect(0, 0, heatmapOverlayCanvas.width, heatmapOverlayCanvas.height);
+
+    heatmapOverlayCtx.strokeStyle = 'var(--marker-colour)';
+    heatmapOverlayCtx.lineWidth = 1;
+
+    // Horizontal line
+    heatmapOverlayCtx.beginPath();
+    heatmapOverlayCtx.moveTo(0, y);
+    heatmapOverlayCtx.lineTo(heatmapOverlayCanvas.width, y);
+    heatmapOverlayCtx.stroke();
+
+    // Vertical line
+    heatmapOverlayCtx.beginPath();
+    heatmapOverlayCtx.moveTo(x, 0);
+    heatmapOverlayCtx.lineTo(x, heatmapOverlayCanvas.height);
+    heatmapOverlayCtx.stroke();
+}
+
+/**
+ * Draws horizontal lines on the spectrogram overlay corresponding to frequency bins.
+ */
+function drawSpectrogramFreqLines(binX, binY) {
+    spectrogramLinesCanvas.width = spectrogramCanvas.width;
+    spectrogramLinesCanvas.height = spectrogramCanvas.height;
+    spectrogramLinesCanvas.style.left = spectrogramCanvas.offsetLeft + 'px';
+    spectrogramLinesCanvas.style.top = spectrogramCanvas.offsetTop + 'px';
+    spectrogramLinesCtx.clearRect(0, 0, spectrogramLinesCanvas.width, spectrogramLinesCanvas.height);
+
+    const numFreqBins = spectrogramCanvas.height;
+    const y1 = numFreqBins - binX;
+    const y2 = numFreqBins - binY;
+
+    spectrogramLinesCtx.strokeStyle = 'var(--marker-colour)';
+    spectrogramLinesCtx.lineWidth = 1;
+
+    // Line for binX
+    spectrogramLinesCtx.beginPath();
+    spectrogramLinesCtx.moveTo(0, y1);
+    spectrogramLinesCtx.lineTo(spectrogramLinesCanvas.width, y1);
+    spectrogramLinesCtx.stroke();
+
+    // Line for binY
+    spectrogramLinesCtx.beginPath();
+    spectrogramLinesCtx.moveTo(0, y2);
+    spectrogramLinesCtx.lineTo(spectrogramLinesCanvas.width, y2);
+    spectrogramLinesCtx.stroke();
+}
+
+/**
+ * Handles mouse movement over the heatmap canvas.
+ */
+function handleHeatmapMouseMove(e) {
+    const rect = heatmapCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const numFreqBins = parseInt(fftSizeInput.value) / 2;
+    const binX = Math.floor((x / heatmapCanvas.width) * numFreqBins);
+    const binY = Math.floor(((heatmapCanvas.height - y) / heatmapCanvas.height) * numFreqBins);
+
+    if (binX >= 0 && binX < numFreqBins && binY >= 0 && binY < numFreqBins) {
+        drawHeatmapCrosshair(x, y);
+        drawSpectrogramFreqLines(binX, binY);
+    }
+}
+
+/**
+ * Handles mouse leaving the heatmap canvas.
+ */
+function handleHeatmapMouseOut() {
+    heatmapOverlayCtx.clearRect(0, 0, heatmapOverlayCanvas.width, heatmapOverlayCanvas.height);
+    spectrogramLinesCtx.clearRect(0, 0, spectrogramLinesCanvas.width, spectrogramLinesCanvas.height);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    spectrogramOverlayCanvas = document.getElementById('spectrogramOverlayCanvas');
+    spectrogramOverlayCtx = spectrogramOverlayCanvas.getContext('2d');
+
+    // Initialize new canvases for cross-referencing
+    heatmapOverlayCanvas = document.getElementById('heatmapOverlayCanvas');
+    heatmapOverlayCtx = heatmapOverlayCanvas.getContext('2d');
+    spectrogramLinesCanvas = document.getElementById('spectrogramLinesCanvas');
+    spectrogramLinesCtx = spectrogramLinesCanvas.getContext('2d');
+
+    heatmapCanvas.addEventListener('mousemove', handleHeatmapMouseMove);
+    heatmapCanvas.addEventListener('mouseout', handleHeatmapMouseOut);
+
+    document.getElementById('fileType').addEventListener('change', (e) => {
+        const rawSettings = document.getElementById('rawSettings');
+        rawSettings.style.display = e.target.value === 'raw' ? 'block' : 'none';
+    });
+
+    loadTheme();
+    document.getElementById('theme-switcher').addEventListener('click', toggleTheme);
+});
+</script>
+
+</body>
+</html>
